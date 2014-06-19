@@ -16,12 +16,12 @@
   Copyright (C) 2009-2013 Jeff Hoefs.  All rights reserved.
   Copyright (C) 2013 Norbert Truchsess. All rights reserved.
   Copyright (C) 2014 Nicolas Panel. All rights reserved.
-  
+
   This library is free software; you can redistribute it and/or
   modify it under the terms of the GNU Lesser General Public
   License as published by the Free Software Foundation; either
   version 2.1 of the License, or (at your option) any later version.
- 
+
   See file LICENSE.txt for further informations on licensing terms.
 
   formatted using the GNU C formatting and indenting
@@ -30,9 +30,9 @@
 
 #include <Firmata.h>
 
-/* 
- * by default Firmata uses the Serial-port (over USB) of Arduino. 
- * ConfigurableFirmata may also comunicate over ethernet using tcp/ip. 
+/*
+ * by default Firmata uses the Serial-port (over USB) of Arduino.
+ * ConfigurableFirmata may also comunicate over ethernet using tcp/ip.
  * To configure this 'Network Firmata' to use the original WIZ5100-based
  * ethernet-shield or Arduino Ethernet uncomment the includes of 'SPI.h' and 'Ethernet.h':
  */
@@ -65,8 +65,40 @@
 const byte mac[] = {0x90,0xA2,0xDA,0x0D,0x07,0x02};
 #endif
 
+/*
+ * To configure 'Wireless Firmata', uncomment the include of 'Mirf.h' and `SPI.h`
+ */
+
+#include <Mirf.h>
+#include <SPI.h>
+
+#if defined _MIRF_H_
+
+#define WIRELESS_FIRMATA
+
+// this is the name on which will listen for wireless traffic - must be 5 characters long
+#define MIRF_LOCAL_ADDR "node2"
+
+// this is the name which we will send traffic to - must be 5 characters long
+#define MIRF_REMOTE_ADDR "node1"
+
+#define MIRF_CE_PIN 8
+
+#define MIRF_CSN_PIN 7
+
+// 0-125 n.b. make sure you use a version legal where you are!
+#define MIRF_CHANNEL 0
+
+// values are defined in nRF24L01.h and are RF_2Mbps, RF_1Mbps or RF_250kbps
+#define MIRF_SPEED RF_2Mbps
+
+// values are defined in nRF24L01.h and are RF_0dBm, RF_6dBm, RF_12dBm or RF_18dBm
+#define MIRF_POWER RF_0dBm
+
+#endif
+
 // To configure, save this file to your working directory so you can edit it
-// then comment out the include and declaration for any features that you do 
+// then comment out the include and declaration for any features that you do
 // not need below.
 
 // Also note that the current compile size for an Arduino Uno with all of the
@@ -94,21 +126,20 @@ ServoFirmata servo;
 #include <utility/I2CFirmata.h>
 I2CFirmata i2c;
 
-#include <utility/OneWireFirmata.h>
-OneWireFirmata oneWire;
+//#include <utility/OneWireFirmata.h>
+//OneWireFirmata oneWire;
 
-#include <utility/StepperFirmata.h>
-StepperFirmata stepper;
+//#include <utility/StepperFirmata.h>
+//StepperFirmata stepper;
 
 #include <utility/FirmataExt.h>
 FirmataExt firmataExt;
 
-#include <utility/FirmataScheduler.h>
-FirmataScheduler scheduler;
+//#include <utility/FirmataScheduler.h>
+//FirmataScheduler scheduler;
 
-#include <utility/EncoderFirmata.h>
-EncoderFirmata encoder;
-
+//#include <utility/EncoderFirmata.h>
+//EncoderFirmata encoder;
 
 // dependencies. Do not comment out the following lines
 #if defined AnalogOutputFirmata_h || defined ServoFirmata_h
@@ -141,6 +172,14 @@ EthernetClient client;
   EthernetClientStream stream(client,IPAddress(0,0,0,0),IPAddress(0,0,0,0),remote_host,remote_port);
 #endif
 #endif
+#endif
+
+#ifdef WIRELESS_FIRMATA
+
+#include <utility/WirelessClientStream.h>
+
+WirelessClientStream stream(MIRF_CE_PIN, MIRF_CSN_PIN, MIRF_CHANNEL, MIRF_SPEED, MIRF_POWER, MIRF_LOCAL_ADDR, MIRF_REMOTE_ADDR);
+
 #endif
 
 /*==============================================================================
@@ -176,8 +215,9 @@ void systemResetCallback()
  * SETUP()
  *============================================================================*/
 
-void setup() 
+void setup()
 {
+  Serial.begin(57600);
 #ifdef NETWORK_FIRMATA
 #ifdef local_ip
   Ethernet.begin((uint8_t*)mac,local_ip);  //start ethernet
@@ -187,6 +227,10 @@ void setup()
   delay(1000);
 #endif
   Firmata.setFirmwareVersion(FIRMATA_MAJOR_VERSION, FIRMATA_MINOR_VERSION);
+
+#ifdef WIRELESS_FIRMATA
+  stream.begin();
+#endif
 
 #if defined AnalogOutputFirmata_h || defined ServoFirmata_h
   /* analogWriteCallback is declared in AnalogWrite.h */
@@ -248,7 +292,20 @@ void setup()
 //  pinMode(PIN_TO_DIGITAL(53), OUTPUT); configure hardware-SS as output on MEGA
   pinMode(PIN_TO_DIGITAL(4), OUTPUT); // switch off SD-card bypassing Firmata
   digitalWrite(PIN_TO_DIGITAL(4), HIGH); // SS is active low;
+#endif
 
+#ifdef WIRELESS_FIRMATA
+  for (byte i=0; i < TOTAL_PINS; i++) {
+    if (IS_PIN_SPI(i) ) {
+      Firmata.setPinMode(i, IGNORE);
+    }
+  }
+
+  Firmata.setPinMode(MIRF_CE_PIN, IGNORE);
+  Firmata.setPinMode(MIRF_CSN_PIN, IGNORE);
+#endif
+
+#if defined(NETWORK_FIRMATA) || defined(WIRELESS_FIRMATA)
   // start up Network Firmata:
   Firmata.begin(stream);
 #else
@@ -261,7 +318,7 @@ void setup()
 /*==============================================================================
  * LOOP()
  *============================================================================*/
-void loop() 
+void loop()
 {
 #ifdef DigitalInputFirmata_h
   /* DIGITALREAD - as fast as possible, check for changes and output them to the
